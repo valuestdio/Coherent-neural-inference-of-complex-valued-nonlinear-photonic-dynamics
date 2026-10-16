@@ -11,8 +11,9 @@ pip install -r requirements.txt
 4.Run utils_tool.py to split the Train and Test sets and creat the weight of loss function
 
 5.Run main.py file to train the model
+```bash
 The model is first trained using the parameters specified in main.py, then fine-tuned for 8 additional epochs with a learning rate of 1e-5 and input dropout set to 0 to obtain the final results.
-
+```
 6.Run main_test.py file to test the model
 
 
