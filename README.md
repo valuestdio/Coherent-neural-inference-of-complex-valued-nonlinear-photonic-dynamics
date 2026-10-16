@@ -8,4 +8,10 @@ pip install -r requirements.txt
 
 3.Run load_data.py to generate normalized Train and Test sets
 
-4.Run Run.py file to train and test the model
+4.Run utils_tool.py to split the Train and Test sets and creat the weight of loss function
+
+5.Run main.py file to train the model
+
+6.Run main_test.py file to test the model
+
+
