@@ -8,7 +8,7 @@ import threading
 import psutil
 import GPUtil
 
-# log string
+# Write a message to the log file and standard output.
 def log_string(log, string):
     log.write(string + '\n')
     log.flush()
@@ -22,24 +22,24 @@ def load_variable_from_hdf5(file_path, dataset_name):
     
 
 def load_alldata(folder_path):
-    # 定义变量名列表
+    # Define the datasets to load.
     variable_names = ['i_x', 'X_train', 'X_test', 'Y_train', 'Y_test_0']
 
-    # 初始化空列表以保存加载的变量
+    # Collect the loaded arrays in the requested order.
     loaded_variables = []
 
-    # 逐个加载变量
+    # Load each dataset from its own file.
     for name in variable_names:
-        # 构造 hdf5 文件路径
+        # Build the HDF5 file path.
         file_path = os.path.join(folder_path, f'{name}.h5')
-        # 加载变量
+        # Read the selected dataset.
         loaded_variables.append(load_variable_from_hdf5(file_path, name))
 
     return tuple(loaded_variables)
 
 def load_test_data(folder_path, tem_folder_path, i):
-    # 定义变量名列表
-    # i_x 从 tem_file 读取，X_test_new 从 data_file 读取，Y_test 从 tem_file 读取
+    # Define the datasets to load.
+    # Load metadata and targets from the source folder, and updated inputs from the result folder.
     paths_and_names = [
         (tem_folder_path, 'i_x'),
         (folder_path, f'X_test_new{i-1}'),
@@ -54,8 +54,8 @@ def load_test_data(folder_path, tem_folder_path, i):
     return tuple(loaded_variables)
 
 def load_test_first(folder_path, tem_folder_path, i):
-    # 定义变量名列表
-    # i_x、X_test、Y_test_0 均从 tem_file 读取
+    # Define the datasets to load.
+    # Load metadata, initial test inputs and first-round targets from the source folder.
     paths_and_names = [
         (tem_folder_path, 'i_x'),
         (tem_folder_path, 'X_test'),
@@ -71,8 +71,8 @@ def load_test_first(folder_path, tem_folder_path, i):
 
 
 def load_train_data(folder_path, tem_folder_path, i):
-    # 定义变量名列表
-    # i_x 和 Y_train 从 tem_file 读取，X_train_new 从 data_file 读取
+    # Define the datasets to load.
+    # Load metadata and training targets from the source folder, and updated inputs from the result folder.
     paths_and_names = [
         (tem_folder_path, 'i_x'),
         (folder_path, f'X_train_new{i-1}'),
@@ -87,8 +87,8 @@ def load_train_data(folder_path, tem_folder_path, i):
     return tuple(loaded_variables)
 
 def load_train_first(folder_path, tem_folder_path, i):
-    # 定义变量名列表
-    # i_x 和 Y_train_0 从 tem_file 读取，X_train_first 从 data_file 读取
+    # Define the datasets to load.
+    # Load metadata, initial training inputs and first-round targets from the source folder.
     paths_and_names = [
         (tem_folder_path, 'i_x'),
         (tem_folder_path, 'X_train_first'),
@@ -107,13 +107,14 @@ def metric(pred_real, pred_imag, target_complex):
     Compute average L2 loss and average phase difference for complex prediction.
 
     Parameters:
-    - pred_real: torch.Tensor, 实部预测
-    - pred_imag: torch.Tensor, 虚部预测
-    - target_complex: torch.Tensor, 复数目标 (dtype=torch.cfloat)
+    - pred_real: torch.Tensor containing predicted real components.
+    - pred_imag: torch.Tensor containing predicted imaginary components.
+    - target_complex: complex target tensor or NumPy array.
 
     Returns:
-    - l2_loss_scaled: float, L2损失 (乘以10000后的值)
-    - mean_phase_diff_deg: float, 平均相角差 (单位：度)
+    - total_loss: scalar tensor, mean complex L2 error plus mean phase error / 180.
+    - l2_loss_scaled: scalar tensor, mean complex L2 error multiplied by 10000.
+    - phase_diff_scaled: scalar tensor, mean absolute phase error in degrees multiplied by 10000.
     """
     if isinstance(target_complex, np.ndarray):
         target_complex = torch.from_numpy(target_complex)
@@ -124,10 +125,10 @@ def metric(pred_real, pred_imag, target_complex):
     l2_diff = torch.sqrt(diff_squared)
     l2_loss = torch.mean(l2_diff)
 
-    # 相角差
+    # Compute the wrapped phase difference in radians.
     pred_complex = torch.complex(pred_real.float(), pred_imag.float())
     phase_diff = torch.angle(pred_complex) - torch.angle(target_complex)
-    phase_diff = torch.remainder(phase_diff + torch.pi, 2 * torch.pi) - torch.pi  # wrap to [-π, π]
+    phase_diff = torch.remainder(phase_diff + torch.pi, 2 * torch.pi) - torch.pi  # Wrap to [-pi, pi].
     mean_phase_diff_deg = torch.mean(torch.abs(phase_diff)) * 180 / torch.pi
     phase = mean_phase_diff_deg/180
 
@@ -146,24 +147,25 @@ def plot_train_loss(train_total_loss, file_path):
 
 def log_resource_growth_multi_gpu(log, start_time, stats_before):
     """
-    记录相对计算开始前的资源增长
-    stats_before: dict, 存储计算开始前的状态
+    Log resource usage changes relative to the baseline captured before computation.
+    stats_before: dict containing the baseline CPU, memory and GPU measurements.
         {
             'cpu': cpu_percent_before,
             'cpu_peak': cpu_peak_before,
+            'mem': memory_used_before_mb,
             'gpu_mem': [gpu_mem_used_before...],
             'gpu_util': [gpu_util_before...]
         }
     """
-    # CPU 利用率
+    # Measure system-wide CPU utilization.
     cpu_now = psutil.cpu_percent(interval=0.1)
     cpu_peak_now = max(psutil.cpu_percent(interval=0.1) for _ in range(10))
     cpu_growth = cpu_now - stats_before['cpu']
     cpu_peak_growth = cpu_peak_now - stats_before['cpu_peak']
     
-    # 系统内存
+    # Measure system-wide memory usage in MB.
     mem_now = psutil.virtual_memory().used / (1024**2)  # MB
-    mem_growth = mem_now - stats_before['mem']  # 保留原来的增长计算
+    mem_growth = mem_now - stats_before['mem']  # Change relative to baseline memory usage.
     
     # GPU
     gpus = GPUtil.getGPUs()
@@ -171,7 +173,7 @@ def log_resource_growth_multi_gpu(log, start_time, stats_before):
         gpu_mem_now = [gpu.memoryUsed for gpu in gpus]
         gpu_util_now = [gpu.load*100 for gpu in gpus]
 
-        # 计算增长
+        # Compute per-device changes relative to the baseline.
         gpu_mem_growth = [now - before for now, before in zip(gpu_mem_now, stats_before['gpu_mem'])]
         gpu_util_growth = [now - before for now, before in zip(gpu_util_now, stats_before['gpu_util'])]
 
@@ -183,7 +185,7 @@ def log_resource_growth_multi_gpu(log, start_time, stats_before):
         gpu_util_growth = []
         gpu_mem_growth_avg = gpu_util_growth_avg = gpu_util_growth_peak = 0
 
-    # 总时间
+    # Measure elapsed wall-clock time.
     total_time_s = time.time() - start_time
 
     log_str = (
@@ -202,19 +204,19 @@ def visual(preds, gts, name='./pic/test.pdf'):
     Visualization of magnitude of complex predictions and ground truths
     After inverse normalization.
     """
-    # 定义归一化时使用的 min 和 max
+    # Define the reference bounds used for inverse normalization.
     min_real = -11.410256765891187
     max_real = 11.410256765891187
     min_imag = -10.608256128626813
     max_imag = 10.608256128626813
     
-    # 反归一化函数
+    # Reconstruct the complex field using the existing normalization formula.
     def inverse_normalize(data_real_norm, data_imag_norm):
         real = data_real_norm * (max_real - min_real) + min_real
         imag = data_imag_norm * (max_real - min_real) + min_real
         return real + 1j * imag
 
-    # 反归一化 preds 和 gts
+    # Inverse-normalize predictions and ground-truth fields.
     preds = inverse_normalize(preds.real, preds.imag)
     gts = inverse_normalize(gts.real, gts.imag)
 
@@ -232,7 +234,7 @@ def torch_unwrap(p, dim=-1, discont=torch.pi):
     Unwrap a tensor of phase angles (in radians) along the specified dimension.
     Similar to numpy.unwrap.
     """
-    # 如果是复数，先取角度
+    # Convert complex inputs to phase angles before unwrapping.
     if torch.is_complex(p):
         p = torch.angle(p)
 
