@@ -7,10 +7,10 @@ def read_hdf5(
     dataset_name='X_train_relation',
 ):
     '''
-    读取hdf5的数据
+    Print the shape of the selected HDF5 dataset.
     '''
     # ----------------------
-    # 加载数据
+    # Load the selected dataset.
     # ----------------------
     i = 29440
     with h5py.File(input_path, 'r') as f:
@@ -27,11 +27,11 @@ def load_h5(path):
         key = keys[0]
         obj = f[key]
 
-        # 顶层直接是 Dataset
+        # Read the first top-level object if it is a dataset.
         if isinstance(obj, h5py.Dataset):
             return obj[()]
 
-        # 顶层是 Group，则继续找其中的 Dataset
+        # Otherwise, search the first top-level group for a nested dataset.
         if isinstance(obj, h5py.Group):
             datasets = []
 
@@ -57,30 +57,30 @@ def merge_menhir_mat_files(
     output_key="data_t"
 ):
     """
-    使用 h5py 读取多个 MATLAB v7.3 文件：
-    每个数据形状为 (16384, 101, 200)，
-    取第一个维度中 7680:8704 的 1024 个样本，
-    沿最后一维拼接得到输出形状 (1024, 101, 3200)。
+    Read and merge MATLAB v7.3 datasets using h5py.
+    For input shape (16384, 101, 200), retain indices 7680:8704
+    along the first axis and concatenate along the final axis.
+    With 16 files, the merged shape is (1024, 101, 3200).
     """
     merged_data = None
-    start_idx, end_idx = 7680, 8704  # 取 1024 个点
+    start_idx, end_idx = 7680, 8704  # Select 1024 feature points.
 
     for i in range(1, num_files + 1):
         file_path = os.path.join(folder, f"{i}-{prefix}.mat")
         print(f"Reading slice [{start_idx}:{end_idx}] from: {file_path}")
 
-        # 用 h5py 读取数据
+        # Read the compound dataset with real and imaginary fields.
         with h5py.File(file_path, 'r') as f:
-            data_struct = f[input_key][()]  # 结构化数组
+            data_struct = f[input_key][()]  # Compound array.
 
         data = data_struct['real'] + 1j * data_struct['imag']
         print("  original shape:", data.shape)
 
-        # 取中间的 1024 个点
+        # Extract the central 1024 feature points.
         data_slice = data[start_idx:end_idx, :, :]
         print("  sliced shape:", data_slice.shape)
 
-        # 拼接
+        # Concatenate along the final axis.
         if merged_data is None:
             merged_data = data_slice
         else:
@@ -88,7 +88,7 @@ def merge_menhir_mat_files(
 
     print(f"\nFinal merged shape: {merged_data.shape}")
 
-    # 保存为结构化数组，方便之后直接用 data_struct['real'] + 1j*data_struct['imag'] 读取
+    # Store real and imaginary fields in a compound array for later reconstruction.
     dt = np.dtype([('real', np.float64), ('imag', np.float64)])
     merged_struct = np.empty(merged_data.shape, dtype=dt)
     merged_struct['real'] = merged_data.real
@@ -109,36 +109,36 @@ def merge_hdf5(folder='Figure/Data/Real_world/RNN', prefix='test_Pred', output_n
         key_name = f'{prefix}_{i}'
 
         with h5py.File(file_path, 'r') as f:
-            data = f[key_name][()]  # 读取数据
+            data = f[key_name][()]  # Read the dataset.
             all_data.append(data)
 
-    # 拼接成 (200, 100, 512)
+    # Concatenate prediction blocks along the second axis.
     merged_data = np.concatenate(all_data, axis=1)
 
-    # 保存合并后的数据
+    # Save the merged dataset.
     output_path = os.path.join(folder, f'{output_name}.h5')
     with h5py.File(output_path, 'w') as f:
         f.create_dataset(output_name, data=merged_data)
 
 def split_train():
-    # 原始数据路径
+    # Source training-data paths.
     x_train_path = 'Temporary Files/X_train.h5'
     y_train_path = 'Temporary Files/Y_train.h5'
-    # 读取数据
+    # Read the dataset.
     with h5py.File(x_train_path, 'r') as f_x:
         key_x = list(f_x.keys())[0]
-        X_train = f_x[key_x][:]  # shape: (58880, 10, 512)
+        X_train = f_x[key_x][:]  # [training_windows, sequence_length, features]
 
     with h5py.File(y_train_path, 'r') as f_y:
         key_y = list(f_y.keys())[0]
-        Y_train = f_y[key_y][:]  # shape: (58880, 10, 512)
+        Y_train = f_y[key_y][:]  # [training_windows, sequence_length, features]
 
-    # 检查形状一致性
+    # Display the loaded array shapes.
     print('X_train',X_train.shape)
     print('Y_train',Y_train.shape)
     
 
-    # 构造 X_train_0 到 X_train_9 和 Y_train_0 到 Y_train_9
+    # Split interleaved training windows into per-round groups.
     for i in range(10):
         X_group = X_train[i::10]
         Y_group = Y_train[i::10]
@@ -146,12 +146,12 @@ def split_train():
         assert X_group.shape == (2688, 10, 1024)
         assert Y_group.shape == (2688, 10, 1024)
 
-        # 保存路径
+        # Output file paths.
         x_save_path = f'Temporary Files/X_train_{i}.h5'
         y_save_path = f'Temporary Files/Y_train_{i}.h5'
         relation_save_path = f'Temporary Files/X_train_relation_{i}.h5'
 
-        # 保存数据
+        # Save each group in a separate HDF5 file.
         with h5py.File(x_save_path, 'w') as f_x_out:
             f_x_out.create_dataset(f'X_train_{i}', data=X_group)
 
@@ -159,24 +159,24 @@ def split_train():
             f_y_out.create_dataset(f'Y_train_{i}', data=Y_group)
 
 def split_train_10to1():
-    # 原始数据路径
+    # Source training-data paths.
     x_train_path = 'Temporary Files/X_train.h5'
     y_train_path = 'Temporary Files/Y_train.h5'
-    # 读取数据
+    # Read the dataset.
     with h5py.File(x_train_path, 'r') as f_x:
         key_x = list(f_x.keys())[0]
-        X_train = f_x[key_x][:]  # shape: (58880, 10, 512)
+        X_train = f_x[key_x][:]  # [training_windows, sequence_length, features]
 
     with h5py.File(y_train_path, 'r') as f_y:
         key_y = list(f_y.keys())[0]
-        Y_train = f_y[key_y][:]  # shape: (58880, 10, 512)
+        Y_train = f_y[key_y][:]  # [training_windows, sequence_length, features]
 
-    # 检查形状一致性
+    # Display the loaded array shapes.
     print('X_train',X_train.shape)
     print('Y_train',Y_train.shape)
     
 
-    # 构造 X_train_0 到 X_train_9 和 Y_train_0 到 Y_train_9
+    # Split interleaved training windows into per-round groups.
     for i in range(100):
         X_group = X_train[i::100]
         Y_group = Y_train[i::100]
@@ -184,11 +184,11 @@ def split_train_10to1():
         assert X_group.shape == (2688, 10, 1024)
         assert Y_group.shape == (2688, 1, 1024)
 
-        # 保存路径
+        # Output file paths.
         x_save_path = f'Temporary Files/X_train_{i}.h5'
         y_save_path = f'Temporary Files/Y_train_{i}.h5'
 
-        # 保存数据
+        # Save each group in a separate HDF5 file.
         with h5py.File(x_save_path, 'w') as f_x_out:
             f_x_out.create_dataset(f'X_train_{i}', data=X_group)
 
@@ -199,14 +199,14 @@ def split_train_pred_single():
     rnn_path = 'Figure/Data/Real_world/10to1/CNNLSTM/train_Pred.h5'
     #rnn_path = 'Figure/Data/Real_world/RNN/train_Pred.h5'
 
-    # 读取原始数据
+    # Load the original predictions.
     with h5py.File(rnn_path, 'r') as f:
-        rnn_pred = f['train_Pred'][:]  # [58880, 10, 512]
+        rnn_pred = f['train_Pred'][:]  # [training_windows, prediction_length, features]
     print(rnn_pred.shape)
-    # 每隔10个取一个（即第0,10,20,...）
-    rnn_pred_0 = rnn_pred[::100]        # [5888, 10, 512]
+    # Select the first prediction from each interleaved trajectory block.
+    rnn_pred_0 = rnn_pred[::100]        # [selected_windows, prediction_length, features]
     print(rnn_pred_0.shape)
-    # 保存为新的h5文件
+    # Save the selected predictions to a new HDF5 file.
     with h5py.File('Figure/Data/Real_world/10to1/CNNLSTM/train_Pred_0.h5', 'w') as f_out:
         f_out.create_dataset('train_Pred_0', data=rnn_pred_0)
 
@@ -214,18 +214,18 @@ def split_train_pred():
     rnn_path = 'Figure/Data/Real_world/RNN/train_Pred.h5'
     rnn_emb_path = 'Figure/Data/Real_world/RNN embedding/train_Pred.h5'
 
-    # 读取原始数据
+    # Load the original predictions.
     with h5py.File(rnn_path, 'r') as f:
-        rnn_pred = f['train_Pred'][:]  # [58880, 10, 512]
+        rnn_pred = f['train_Pred'][:]  # [training_windows, prediction_length, features]
 
     with h5py.File(rnn_emb_path, 'r') as f_e:
-        rnn_emb_pred = f_e['train_Pred'][:]  # [58880, 10, 512]
+        rnn_emb_pred = f_e['train_Pred'][:]  # [training_windows, prediction_length, features]
 
-    # 每隔10个取一个（即第0,10,20,...）
-    rnn_pred_0 = rnn_pred[::10]        # [5888, 10, 512]
-    rnn_emb_pred_0 = rnn_emb_pred[::10]  # [5888, 10, 512]
+    # Select the first prediction from each interleaved trajectory block.
+    rnn_pred_0 = rnn_pred[::10]        # [selected_windows, prediction_length, features]
+    rnn_emb_pred_0 = rnn_emb_pred[::10]  # [selected_windows, prediction_length, features]
 
-    # 保存为新的h5文件
+    # Save the selected predictions to a new HDF5 file.
     with h5py.File('Figure/Data/Real_world/RNN/train_Pred_0.h5', 'w') as f_out:
         f_out.create_dataset('train_Pred_0', data=rnn_pred_0)
 
@@ -236,24 +236,24 @@ def split_train_pred():
 def compute_feature_weights(param_path="Temporary Files_sort/Temporary Files_9m_my/norm_params.npz", 
                             weight_path="Temporary Files_sort/Temporary Files_9m_my/feature_weights.npz",
                             alpha=4.0):
-    # 从 npz 文件加载归一化参数
+    # Load normalization parameters from the NPZ file.
     params = np.load(param_path)
 
-    max_power = params["max_power"]  # (1,1024,1)
+    max_power = params["max_power"]  # [1, features, 1]
 
-    # reshape 成 (1024,)
+    # Flatten to one power value per feature.
     max_power = max_power.reshape(-1)
 
-    # 全局最大幅度
+    # Maximum power across all features.
     global_max_amp = np.max(max_power)
 
-    # 原始权重
-    base_weights = 1.0 + max_power / (global_max_amp)  # (1024,)
+    # Form base weights from normalized per-feature power.
+    base_weights = 1.0 + max_power / (global_max_amp)  # [features]
 
-    # 权重的 α 次方
+    # Raise the base weights to the exponent alpha.
     weights = base_weights ** alpha
 
-    # 保存权重
+    # Save the feature weights.
     np.savez(weight_path, weights=weights)
 
     return weights
