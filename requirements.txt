@@ -1,0 +1,15 @@
+# Direct dependencies of the source files in this directory.
+# Reference environment: Windows x64, Python 3.12.13, NVIDIA RTX 4090.
+# Original PyTorch installation: Conda pytorch 2.5.1 with pytorch-cuda 12.1.
+# The pip equivalent below explicitly selects the CUDA 12.1 build.
+# Observed cuDNN: 9.1.0; observed NVIDIA driver: 610.88.
+# CUDA and the NVIDIA driver are not Python packages named "cuda".
+# Install with: python -m pip install -r requirements.txt
+
+--extra-index-url https://download.pytorch.org/whl/cu121
+torch==2.5.1+cu121
+numpy==2.0.1
+h5py==3.16.0
+matplotlib==3.11.1
+psutil==7.2.2
+GPUtil==1.4.0
