@@ -5,7 +5,7 @@ Nonlinearity is ubiquitous in nature and technology, yet modelling complex nonli
 ```bash
 pip install -r requirements.txt
 ```
-2.The datasets can be obtained 
+2.The datasets can be obtained from [Zenodo](https://doi.org/10.5281/zenodo.23436989)
 
 3.Run load_data.py to generate normalized Train and Test sets
 
